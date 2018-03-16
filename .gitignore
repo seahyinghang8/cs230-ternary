@@ -1,0 +1,17 @@
+*.pyc
+archive/data/*
+
+# HIDE DATASET
+cifar-10/cifar.python/*
+cifar-10/images/*
+
+# HIDE IMAGENET
+imagenet/
+
+# IGNORE VIRTUAL ENV
+.env/
+
+# TERNARY NET CODE FROM ZHU ET AL.
+quantize/
+cifar-10/models/
+cifar-10/utils.py
