@@ -12,7 +12,7 @@ import models
 args = argparse.ArgumentParser().parse_args()
 
 # IMAGE DATA FOLDER
-args.image_folder = "images/"
+args.image_folder = "adversarial/"
 # FULL WEIGHTS
 args.pretrained_full = "weights/cifar10-full/model_best.pth.tar"
 # TERNARY WEIGHTS
