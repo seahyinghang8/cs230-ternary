@@ -1,4 +1,7 @@
+# Evaluate both the ternary and full precision models against the noisy datasets
+# Some imports are based of code from Zhu et al and thus they are not made public on github 
 import _init_paths
+import os
 import argparse
 import torch
 import torch.backends.cudnn as cudnn
@@ -8,10 +11,15 @@ import models
 
 args = argparse.ArgumentParser().parse_args()
 
-args.arch = "resnet20"
-args.pretrained = "weights/cifar10-full/model_best.pth.tar"
-#args.pretrained = "weights/cifar10-twn/model_restored.pth.tar"
+# IMAGE DATA FOLDER
+args.image_folder = "images/"
+# FULL WEIGHTS
+args.pretrained_full = "weights/cifar10-full/model_best.pth.tar"
+# TERNARY WEIGHTS
+args.pretrained_twn = "weights/cifar10-twn/model_restored.pth.tar"
+# Other variables
 args.data_path = "cifar.python"
+args.arch = "resnet20"
 args.batch_size = 128
 args.workers = 16
 args.ngpu = 0
@@ -22,36 +30,61 @@ def main(args):
   mean = [x / 255 for x in [125.3, 123.0, 113.9]]
   std = [x / 255 for x in [63.0, 62.1, 66.7]]
 
-  test_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])
-  # DEFAULT TEST DATA LOADER
-  test_data = dset.CIFAR10(args.data_path, train=False, transform=test_transform, download=False)
-  # IMAGE TEST DATA LOADER
-  #test_data = dset.ImageFolder("images", transform=test_transform)
-  test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
-  
-  print("=> creating model '{}'".format(args.arch))
-  # Init model, criterion, and optimizer
-  net = models.__dict__[args.arch](num_classes) #NOTE load the architecture  
+  # Init model, criterion, and optimizer for both twn and full
+  net_full = models.__dict__[args.arch](num_classes) #NOTE load the architecture  
+  net_twn = models.__dict__[args.arch](num_classes) 
 
-  print("=> network :\n {}".format(net))
-  net = torch.nn.DataParallel(net, device_ids=list(range(args.ngpu)))
+  net_full = torch.nn.DataParallel(net_full, device_ids=list(range(args.ngpu)))
+  net_twn = torch.nn.DataParallel(net_twn, device_ids=list(range(args.ngpu)))
 
-  pretrained = torch.load(args.pretrained, map_location={'cuda:0': 'cpu'}) #NOTE Load Pre-trained Model
+  pretrained_full = torch.load(args.pretrained_full, map_location={'cuda:0': 'cpu'}) #NOTE Load Pre-trained Model
+  pretrained_twn = torch.load(args.pretrained_twn, map_location={'cuda:0': 'cpu'}) #NOTE Load Pre-trained Model
   
   try:
-    net.load_state_dict(pretrained['state_dict']) #NOTE reconstructs the model
+    net_full.load_state_dict(pretrained_full['state_dict']) #NOTE reconstructs the model
   except KeyError as e:
+    print("Error - Full")
     print(e)
 
-  print("=> loaded pretrained model '{}'".format(args.pretrained))
+  try:
+    net_twn.load_state_dict(pretrained_twn['state_dict']) #NOTE reconstructs the model
+  except KeyError as e:
+    print("Error - Ternary")
+    print(e)
   
-  # NOTE ATTEMPT TO PRINT MODEL
-  #for m in net.modules():
-  #  if isinstance(m, torch.nn.Conv2d):
-  #    print(m.weight)
+  module_num = 18
+  counter = 0
+  print("\nFull Precision Weights")
+  for m in net_full.modules():
+    if (counter == module_num):
+      print(m.weight[0][0])
+    counter += 1
+  
+  counter = 0
+  print("Ternary Weights")
+  for m in net_twn.modules():
+    if (counter == module_num):
+      print(m.weight[0][0])
+    counter += 1
+  
 
-  # run the validation program
-  validate(test_loader, net)
+  # run through all the test datasets
+  test_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])
+  # DEFAULT TEST DATA LOADER
+  #test_data = dset.CIFAR10(args.data_path, train=False, transform=test_transform, download=False)
+  # IMAGE TEST DATA LOADER
+  image_list = os.listdir(args.image_folder)
+  image_list.sort()
+  for name in image_list:
+    path = os.path.join(args.image_folder, name)
+    test_data = dset.ImageFolder(path, transform=test_transform)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
+    print("Loading dataset %s" %(name))
+    print("Running Full Precision Model:")
+    validate(test_loader, net_full)
+    print("Running Ternary Model:")
+    validate(test_loader, net_twn)
+    print("\n")
 
 
 #NOTE net -> model, val_loader is the data loader, citerion is just a comparator module
