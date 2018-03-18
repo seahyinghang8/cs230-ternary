@@ -4,6 +4,7 @@ archive/data/*
 # HIDE DATASET
 cifar-10/cifar.python/*
 cifar-10/images/*
+cifar-10/adversarial/*
 
 # HIDE IMAGENET
 imagenet/
