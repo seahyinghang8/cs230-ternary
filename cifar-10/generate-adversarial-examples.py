@@ -21,7 +21,7 @@ import numpy as np
 test_batch = "cifar.python/cifar-10-batches-py/test_batch"
 meta = "cifar.python/cifar-10-batches-py/batches.meta"
 destination = "adversarial/"
-dataset_max = 100
+dataset_max = 1000
 
 args = argparse.ArgumentParser().parse_args()
 
@@ -115,7 +115,7 @@ class FastGradientSignUntargeted():
         if not os.path.exists('../generated'):
             os.makedirs('../generated')
 
-    def generate(self, original_image, label_names, destination, network_type):
+    def generate(self, original_image, im_label, label_names, destination, network_type):
         # I honestly dont know a better way to create a variable with specific value
         
         # Define loss functions
@@ -123,27 +123,6 @@ class FastGradientSignUntargeted():
         # Process image
         # Convert to float tensor
         processed_image = preprocess_image(original_image)
-        
-        # Zero out previous gradients
-        # Can also use zero_gradients(x)
-        processed_image.grad = None
-        # Forward pass
-        out = self.model(processed_image)
-        # Calculate CE loss
-        
-        # Assess the initial label of the image
-        recreated_image = recreate_image(processed_image)
-        # Process confirmation image
-        prep_confirmation_image = preprocess_image(recreated_image)
-        # Forward pass
-        confirmation_out = self.model(prep_confirmation_image)
-        # Get prediction
-        _, confirmation_prediction = confirmation_out.data.max(1)
-        # Get Probability
-        confirmation_confidence = nn.functional.softmax(confirmation_out)[0][confirmation_prediction].data.numpy()[0]
-        # Convert tensor to int
-        confirmation_prediction = confirmation_prediction.numpy()[0]
-        im_label = confirmation_prediction
         # Set the initial label after the forward propagation
         im_label_as_var = Variable(torch.from_numpy(np.asarray([im_label])))
         
@@ -181,22 +160,21 @@ class FastGradientSignUntargeted():
             #print(prep_confirmation_image.shape)
             confirmation_out = self.model(prep_confirmation_image)
             # Get prediction
-            _, confirmation_prediction = confirmation_out.data.max(1)
+            _, confirmation_prediction = confirmation_out.data.topk(1, 1, True, True)
+            confirmation_prediction = confirmation_prediction[0][0]
             # Get Probability
-            confirmation_confidence = nn.functional.softmax(confirmation_out)[0][confirmation_prediction].data.numpy()[0]
-            # Convert tensor to int
-            confirmation_prediction = confirmation_prediction.numpy()[0]
+            confirmation_confidence = nn.functional.softmax(confirmation_out, dim=1).data[0][confirmation_prediction]
             # Check if the prediction is different than the original
             if confirmation_prediction != im_label:
                 print("Generated adversarial eg against %s" %(network_type))
-                print('Original image was predicted as:', im_label,
-                      'with adversarial noise converted to:', confirmation_prediction,
+                print('Original image was predicted as:', label_names[im_label].decode("utf-8"),
+                      'with adversarial noise converted to:', label_names[confirmation_prediction].decode("utf-8"),
                       'and predicted with confidence of:', confirmation_confidence)
                 # Create the image for noise as: Original image - generated image
                 noise_image = original_image - recreated_image
                 
                 # Create file names
-                name_end = str(im_label) + "_to_" + str(confirmation_prediction) + ".jpg"
+                name_end = label_names[im_label].decode("utf-8") + "_to_" + label_names[confirmation_prediction].decode("utf-8") + ".jpg"
                 noise_name = "noise_from_" + name_end
                 image_name = "img_from_" + name_end
 
@@ -276,6 +254,7 @@ def main():
     FGS_untargeted_twn = FastGradientSignUntargeted(net_twn, 0.01)
 
     # create paths for 0-twn, 100-twn, 0-full, 100-full, noise-twn, noise-full
+    make_label_directory(os.path.join(destination, "clean"), label_names)
     make_label_directory(os.path.join(destination, "0-twn"), label_names)
     make_label_directory(os.path.join(destination, "100-twn"), label_names)
     make_label_directory(os.path.join(destination, "0-full"), label_names)
@@ -286,11 +265,31 @@ def main():
     for image_counter in range(0, dataset_size):
         # loop through all the images in the dataset and transposing it
         original_image = dataset[b'data'][image_counter,:]
+        correct_label = dataset[b'labels'][image_counter]
         original_image = original_image.reshape(3,32,32).transpose([1, 2, 0])
+        # perform forward propagation that we work with images which the network is predicting correctly
+        # Process image
+        # Convert to float tensor
+        processed_image = preprocess_image(original_image)
+        # Forward pass
+        initial_out = net_full(processed_image)
+        # Get prediction
+        initial_prediction = initial_out.data.topk(1, 1, True, True)[1][0][0]
+        print("\nData label: %d\tModel output: %d" %(correct_label, initial_prediction))
+
+        if (initial_prediction != correct_label):
+            print("Mismatch labels")
+            continue
+
+        print("Performing adversarial data generation")
+        # save the clean image into the right labels
+        image_name = str(image_counter) + ".jpg"
+        clean_path = os.path.join(destination, "clean", label_names[correct_label].decode("utf-8"), image_name)
+        cv2.imwrite(clean_path, original_image)
         # create targeted examples against full precision networks
-        FGS_untargeted_full.generate(original_image, label_names, destination, "full")
+        FGS_untargeted_full.generate(original_image, correct_label, label_names, destination, "full")
         # create targeted examples against ternary networks
-        FGS_untargeted_twn.generate(original_image, label_names, destination, "twn")
+        FGS_untargeted_twn.generate(original_image, correct_label, label_names, destination, "twn")
 
 
 main()
