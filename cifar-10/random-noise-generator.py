@@ -17,7 +17,7 @@ import pickle
 test_batch = "cifar.python/cifar-10-batches-py/test_batch"
 meta = "cifar.python/cifar-10-batches-py/batches.meta"
 destination = "images/"
-dataset_max = 100
+dataset_max = 100000
 
 #unpickle
 def unpickle(file):
@@ -25,7 +25,7 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-# Source of the code is based on an excelent piece code from stackoverflow
+# Source of the code is based on an excellent piece code from stackoverflow
 # http://stackoverflow.com/questions/22937589/how-to-add-noise-gaussian-salt-and-pepper-etc-to-image-in-python-with-opencv
 def noise_generator (noise_type, image, 
                      #for gaussian

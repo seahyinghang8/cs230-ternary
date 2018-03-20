@@ -1,16 +1,32 @@
 # CS230 Ternary Operators
-We are utilizing cs230-code-examples provided in tensorflow/vision to study the impact on performance by ternarizing the weights.
+Our project is to test the robustness of ternary network models VS. full precision models against image noise. We will be testing our hypothesis using ResNet20 on CIFAR-10 dataset. 
 
-Install the hand sign dataset from the starter code, and follow the same procedure as stated on the started code.
-
-To ternarize the base_model, run
+We would like to credit our models to Zhu et al. for the ternary models.
 ```
-python ternarize.py
+@article{zhu2016trained,
+  title={Trained Ternary Quantization},
+  author={Zhu, Chenzhuo and Han, Song and Mao, Huizi and Dally, William J},
+  journal={arXiv preprint arXiv:1612.01064},
+  year={2016}
+}
+```
+
+We will test our network against random noise and adversarial noise.
+
+To generate random noise, run
+```
+cd cifar
+python random-noise-generator.py
+```
+
+To generate adversarial noise, run
+```
+python adversarial-noise-generator.py
 ```
 
 To evaluate the model, run
 ```
-python evaluate.py --data_dir data/64x64_SIGNS --model_dir experiments/ternary
+python eval.py
 ```
 
 # Misc Code

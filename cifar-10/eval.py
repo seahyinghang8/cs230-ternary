@@ -86,6 +86,14 @@ def main(args):
     validate(test_loader, net_twn)
     print("\n")
 
+  # validate the full test set
+  '''
+  test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
+  print("Full Model:")
+  validate(test_loader, net_full)
+  print("TWN Model:")
+  validate(test_loader, net_twn)
+  '''
 
 #NOTE net -> model, val_loader is the data loader, citerion is just a comparator module
 def validate(val_loader, model):
