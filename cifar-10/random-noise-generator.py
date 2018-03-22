@@ -17,7 +17,7 @@ import pickle
 test_batch = "cifar.python/cifar-10-batches-py/test_batch"
 meta = "cifar.python/cifar-10-batches-py/batches.meta"
 destination = "images/"
-dataset_max = 100000
+dataset_max = 10000
 
 #unpickle
 def unpickle(file):

@@ -68,10 +68,10 @@ class FastGradientSignUntargeted():
         im_label = target_var.data[0]
 
         original_var = input_var.clone()
-        
         # Start iteration
-        for i in range(100):
-            #print('Iteration:', str(i))
+
+        for i in range(150):
+            print('Iteration:', str(i))
             # zero_gradients(x)
             # Zero out previous gradients
             # Can also use zero_gradients(x)
@@ -86,8 +86,8 @@ class FastGradientSignUntargeted():
             # Here, processed_image.grad.data is also the same thing is the backward gradient from
             # the first layer, can use that with hooks as well
             adv_noise = self.alpha * torch.sign(input_var.grad.data)
-            # Add Noise to processed image
             input_var.data = input_var.data + adv_noise
+            
             confirmation_out = self.model(input_var)
             # Get prediction
             _, confirmation_prediction = confirmation_out.data.topk(1, 1, True, True)
@@ -96,12 +96,10 @@ class FastGradientSignUntargeted():
             confirmation_confidence = nn.functional.softmax(confirmation_out, dim=1).data[0][confirmation_prediction]
             # Check if the prediction is different than the original
             if (confirmation_prediction != im_label):
-                '''
                 print("Generated adversarial eg against %s" %(network_type))
                 print('Original image was predicted as:', label_names[im_label].decode("utf-8"),
                       'with adversarial noise converted to:', label_names[confirmation_prediction].decode("utf-8"),
                       'and predicted with confidence of:', confirmation_confidence)
-                      '''
 
                 # Create file names
                 name_end = label_names[im_label].decode("utf-8") + "_to_" + label_names[confirmation_prediction].decode("utf-8") + str(img_counter) + ".jpg"
@@ -122,9 +120,7 @@ class FastGradientSignUntargeted():
                 diff = (100 * input_var - 100 * original_var)
                 torch_mean = torch.mean(torch.abs(diff)).data[0]
                 mean_sum = mean_sum + torch_mean
-
                 return mean_sum
-        return 1
 
 def make_label_directory(directory, label_names):
     # Delete existing data and create the directory
@@ -194,12 +190,13 @@ def main():
     print("Loading dataset")
     label_names = unpickle(meta)[b'label_names']
 
-    FGS_untargeted_full = FastGradientSignUntargeted(net_full, 0.001)
-    FGS_untargeted_twn = FastGradientSignUntargeted(net_twn, 0.001)
+    FGS_untargeted_full = FastGradientSignUntargeted(net_full, 0.01)
+    FGS_untargeted_twn = FastGradientSignUntargeted(net_twn, 0.01)
 
     # create paths for 0-twn, 100-twn, 0-full, 100-full, noise-twn, noise-full
     make_label_directory(os.path.join(destination, "clean-twn"), label_names)
     make_label_directory(os.path.join(destination, "clean-full"), label_names)
+
     make_label_directory(os.path.join(destination, "0-twn"), label_names)
     make_label_directory(os.path.join(destination, "100-twn"), label_names)
     make_label_directory(os.path.join(destination, "0-full"), label_names)
@@ -213,7 +210,8 @@ def main():
     for i, (input_img, target) in enumerate(test_loader):
         if (i > dataset_max):
             break
-        print("Image:", str(i))
+
+        print("\nImage:", str(i))
 
         input_var = torch.autograd.Variable(input_img, requires_grad=True)
         target_var = torch.autograd.Variable(target)
@@ -221,29 +219,36 @@ def main():
         full_out = net_full(input_var)
         twn_out = net_twn(input_var)
         # Generate clean image for saving
-        tensor = transforms.Normalize(zero_mean, inv_std)(input_var.data[0])
+        tensor = transforms.Normalize(zero_mean, inv_std)(input_var.clone().data[0])
         tensor = transforms.Normalize(inv_mean, one_std)(tensor)
+        #tensor[tensor > 1] = 1
+        #tensor[tensor < 0] = 0
         original_image = transforms.ToPILImage(mode=None)(tensor)
         image_name = str(i) + ".jpg"
+        clean_path = os.path.join(destination, "clean-full", label_names[im_label].decode("utf-8"), image_name)
+        original_image.save(clean_path)
+
         # Get prediction
         full_prediction = full_out.data.topk(1, 1, True, True)[1][0][0]
         twn_prediction = twn_out.data.topk(1, 1, True, True)[1][0][0]
-        print("\nData label: %d\tFull: %d\tTwn: %d" %(im_label, full_prediction, twn_prediction))
 
-        if (full_prediction == im_label):
+        print("Data label: %d\tFull: %d\tTwn: %d" %(im_label, full_prediction, twn_prediction))
+
+        if (full_prediction == im_label and twn_prediction == im_label):
             print("Generating adversarial for full")
             clean_path = os.path.join(destination, "clean-full", label_names[im_label].decode("utf-8"), image_name)
             original_image.save(clean_path)
             # create targeted examples against full precision networks
-            full_sum = FGS_untargeted_full.generate(input_var, target_var, label_names, destination, "full", full_sum, i)
-            full_counter = full_counter + 1
+            full_input_var = torch.autograd.Variable(input_img, requires_grad=True)
+            full_sum = FGS_untargeted_full.generate(full_input_var, target_var, label_names, destination, "full", full_sum, i)
+            full_counter = full_counter + 1\
 
-        if (twn_prediction == im_label):
             print("Generating adversarial for twn")
             clean_path = os.path.join(destination, "clean-twn", label_names[im_label].decode("utf-8"), image_name)
             original_image.save(clean_path)
-            # create targeted examples against full precision networks
-            twn_sum = FGS_untargeted_twn.generate(input_var, target_var, label_names, destination, "twn", twn_sum, i)
+             # create targeted examples against full precision networks
+            twn_input_var = torch.autograd.Variable(input_img, requires_grad=True)
+            twn_sum = FGS_untargeted_twn.generate(twn_input_var, target_var, label_names, destination, "twn", twn_sum, i)
             twn_counter = twn_counter + 1    
 
     print("Full Counter:", full_counter)

@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import models
-
+import numpy as np
 args = argparse.ArgumentParser().parse_args()
 
 # IMAGE DATA FOLDER
@@ -70,32 +70,28 @@ def main(args):
 
   # run through all the test datasets
   test_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])
-  # IMAGE TEST DATA LOADER
-  
-  image_list = os.listdir(args.image_folder)
-  image_list.sort()
-  for name in image_list:
-    path = os.path.join(args.image_folder, name)
-    test_data = dset.ImageFolder(path, transform=test_transform)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
-    print("Loading dataset %s" %(name))
-    print("Running Full Precision Model:")
-    validate(test_loader, net_full)
-    print("Running Ternary Model:")
-    validate(test_loader, net_twn)
-    print("\n")
-
-  # validate the full test set
-  
   # DEFAULT TEST DATA LOADER
-  '''test_data = dset.CIFAR10(args.data_path, train=False, transform=test_transform, download=False)
+  test_data = dset.CIFAR10(args.data_path, train=False, transform=test_transform, download=False)
   test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=True)
   print("Full Model:")
   validate(test_loader, net_full)
   print("TWN Model:")
   validate(test_loader, net_twn)
-  '''
-  
+
+def noise_generator (tensor, s_vs_p = 0.5, amount = 0.004):
+    out = tensor
+    # Generate Salt '1' noise
+    num_salt = np.ceil(amount * tensor.size * s_vs_p)
+    coords = [np.random.randint(0, i - 1, int(num_salt))
+          for i in tensor.shape]
+    out[coords] = 255
+    # Generate Pepper '0' noise
+    num_pepper = np.ceil(amount * tensor.size * (1. - s_vs_p))
+    coords = [np.random.randint(0, i - 1, int(num_pepper))
+          for i in tensor.shape]
+    out[coords] = 0
+    return out
+
 
 #NOTE net -> model, val_loader is the data loader, citerion is just a comparator module
 def validate(val_loader, model):
@@ -110,6 +106,7 @@ def validate(val_loader, model):
     input_var = torch.autograd.Variable(input, volatile=True) #NOTE constructs a variable from the input
     target_var = torch.autograd.Variable(target, volatile=True) #NOTE
 
+    noisy_var = noise_generator(input_var, 0.5, 0.004)
     # compute output
     output = model(input_var)
 
